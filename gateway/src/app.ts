@@ -10,10 +10,13 @@ import { logger } from './lib/logger';
 import { createAuthRouter } from './auth/authRoutes';
 import { TokenService } from './auth/tokens';
 import { enforceRouteAuth } from './auth/authMiddleware';
+import { RateLimiter } from './rateLimit/rateLimiter';
+import { rateLimit } from './middleware/rateLimit';
 
 export function createApp(configStore: ConfigStore, redis: Redis): Express {
   const app = express();
   const tokenService = new TokenService(redis);
+  const rateLimiter = new RateLimiter(redis);
 
   app.disable('x-powered-by');
   app.use(requestId);
@@ -36,10 +39,12 @@ export function createApp(configStore: ConfigStore, redis: Redis): Express {
 
   app.use('/auth', createAuthRouter(redis));
 
-  // Proxy everything that matches a configured route. Auth is enforced per-route
-  // based on routes.yaml (auth: required), after the route is resolved.
+  // Proxy everything that matches a configured route:
+  //  1. resolveRoute   -- match path to routes.yaml, 404 if nothing matches
+  //  2. enforceRouteAuth -- 401/403 if the route requires auth and it's missing/invalid
+  //  3. rateLimit      -- per-API-key (or per-IP for public routes) token bucket
   const proxy = createGatewayProxy();
-  app.use(resolveRoute(configStore), enforceRouteAuth(tokenService), proxy);
+  app.use(resolveRoute(configStore), enforceRouteAuth(tokenService), rateLimit(configStore, rateLimiter), proxy);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
