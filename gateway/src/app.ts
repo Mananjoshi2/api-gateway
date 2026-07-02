@@ -1,7 +1,9 @@
 import express, { Express } from 'express';
 import pinoHttp from 'pino-http';
+import swaggerUi from 'swagger-ui-express';
 import { Redis } from 'ioredis';
 import { ConfigStore } from './config/configStore';
+import { openapiSpec } from './docs/openapiSpec';
 import { requestId, REQUEST_ID_HEADER } from './middleware/requestId';
 import { resolveRoute } from './middleware/resolveRoute';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler';
@@ -33,9 +35,22 @@ export function createApp(configStore: ConfigStore, redis: Redis): Express {
     }),
   );
 
+  /**
+   * @openapi
+   * /health:
+   *   get:
+   *     summary: Gateway liveness check
+   *     tags: [Admin]
+   *     responses:
+   *       200:
+   *         description: Gateway process is up
+   */
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
   });
+
+  app.get('/docs.json', (_req, res) => res.json(openapiSpec));
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
   app.use('/auth', createAuthRouter(redis));
 
