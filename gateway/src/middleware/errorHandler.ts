@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import { HttpError } from '../lib/httpError';
 import { logger } from '../lib/logger';
 import { REQUEST_ID_HEADER } from './requestId';
@@ -14,6 +15,11 @@ export function notFoundHandler(req: Request, res: Response): void {
 // Express recognizes error-handling middleware by arity (4 args) -- keep all four.
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   const requestId = req.headers[REQUEST_ID_HEADER];
+
+  if (err instanceof ZodError) {
+    res.status(400).json({ error: 'validation_error', message: 'Invalid request body', requestId, details: err.issues });
+    return;
+  }
 
   if (err instanceof HttpError) {
     if (err.status >= 500) {
