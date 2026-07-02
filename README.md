@@ -6,6 +6,12 @@ real concurrency, config-driven reverse proxying with a version-aware
 rollback/circuit-breaker, Prometheus + Grafana monitoring, and a standalone Go
 CLI used to prove the throughput claims.
 
+**Live demo:** https://api-gateway-et70.onrender.com (free tier -- first
+request after idle takes a few seconds to cold-start). Try:
+`curl -X POST https://api-gateway-et70.onrender.com/auth/register -H "Content-Type: application/json" -d '{"email":"you@example.com","password":"password123","tier":"pro"}'`,
+then hit `/api/users/1` or `/api/orders/1` with the returned `accessToken`, or
+just open `/docs` in a browser.
+
 ## Architecture
 
 ```
