@@ -50,7 +50,7 @@
  *       currently active (routes.yaml `activeVersion`). If the active version's
  *       error rate crosses `rollback.errorThreshold` over the last
  *       `rollback.windowSize` requests, the gateway automatically flips back to
- *       the last known-good version -- see Admin > /admin/routes/{path}/version.
+ *       the last known-good version -- see Admin > POST /admin/routes/version.
  *     tags: [Gateway]
  *     security: [{ bearerAuth: [] }]
  *     parameters:

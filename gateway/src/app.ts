@@ -11,16 +11,20 @@ import { createGatewayProxy } from './proxy/proxy';
 import { logger } from './lib/logger';
 import { createAuthRouter } from './auth/authRoutes';
 import { TokenService } from './auth/tokens';
-import { enforceRouteAuth } from './auth/authMiddleware';
+import { enforceRouteAuth, requireAuth } from './auth/authMiddleware';
 import { RateLimiter } from './rateLimit/rateLimiter';
 import { rateLimit } from './middleware/rateLimit';
 import { metricsMiddleware } from './middleware/metrics';
 import { registry, rateLimitRejectionsTotal, upstreamErrorsTotal } from './metrics/metrics';
+import { RollbackTracker } from './admin/rollbackTracker';
+import { evaluateRollback } from './admin/circuitBreaker';
+import { createAdminRouter } from './admin/adminRoutes';
 
 export function createApp(configStore: ConfigStore, redis: Redis): Express {
   const app = express();
   const tokenService = new TokenService(redis);
   const rateLimiter = new RateLimiter(redis);
+  const rollbackTracker = new RollbackTracker(redis);
 
   app.disable('x-powered-by');
   app.use(requestId);
@@ -71,6 +75,7 @@ export function createApp(configStore: ConfigStore, redis: Redis): Express {
   });
 
   app.use('/auth', createAuthRouter(redis));
+  app.use('/admin', requireAuth(tokenService), createAdminRouter(configStore, rollbackTracker));
 
   // Proxy everything that matches a configured route:
   //  1. resolveRoute   -- match path to routes.yaml, 404 if nothing matches
@@ -78,12 +83,23 @@ export function createApp(configStore: ConfigStore, redis: Redis): Express {
   //  3. rateLimit      -- per-API-key (or per-IP for public routes) token bucket
   const proxy = createGatewayProxy({
     onProxyResponse: (route, version, statusCode) => {
-      if (statusCode >= 500) {
+      const isError = statusCode >= 500;
+      if (isError) {
         upstreamErrorsTotal.inc({ route: route.path, version: version || 'n/a', status_code: String(statusCode) });
+      }
+      if (version) {
+        evaluateRollback(configStore, rollbackTracker, route, version, isError).catch((err) =>
+          logger.error({ err, route: route.path }, 'circuit breaker evaluation failed'),
+        );
       }
     },
     onProxyError: (route, version) => {
       upstreamErrorsTotal.inc({ route: route?.path || 'unknown', version: version || 'n/a', status_code: 'network_error' });
+      if (route && version) {
+        evaluateRollback(configStore, rollbackTracker, route, version, true).catch((err) =>
+          logger.error({ err, route: route.path }, 'circuit breaker evaluation failed'),
+        );
+      }
     },
   });
   app.use(
