@@ -1,0 +1,108 @@
+# Render Blueprint: deploys the gateway + 3 mock upstreams + Redis, all on
+# Render's free plan (no paid resources anywhere in this file). Apply via
+# Render Dashboard > New > Blueprint, pointing at this repo. See DEPLOY.md
+# for the AWS EC2 path instead, if you want a persistent/paid deployment.
+#
+# Free-tier tradeoffs, by design:
+#   - Every web service spins down after 15 min idle and cold-starts on the
+#     next request (a few seconds) -- fine for an occasionally-viewed demo.
+#   - The free Key Value (Redis-compatible) plan caps out at 25MB, plenty for
+#     rate-limit buckets + a handful of demo user accounts.
+#   - Prometheus/Grafana are intentionally not deployed here -- they're a
+#     local-only part of the stack (see docker-compose.yml + README).
+
+services:
+  - type: web
+    name: api-gateway
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./gateway/Dockerfile
+    dockerContext: ./gateway
+    healthCheckPath: /health
+    envVars:
+      - key: ROUTES_CONFIG_PATH
+        value: ./config/routes.render.yaml
+      - key: LOG_LEVEL
+        value: info
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: api-gateway-redis
+          property: connectionString
+      - key: MOCK_USERS_HOSTPORT
+        fromService:
+          type: web
+          name: api-gateway-mock-users
+          property: hostport
+      - key: MOCK_ORDERS_V1_HOSTPORT
+        fromService:
+          type: web
+          name: api-gateway-mock-orders-v1
+          property: hostport
+      - key: MOCK_ORDERS_V2_HOSTPORT
+        fromService:
+          type: web
+          name: api-gateway-mock-orders-v2
+          property: hostport
+
+  - type: web
+    name: api-gateway-mock-users
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./mock-upstreams/Dockerfile
+    dockerContext: ./mock-upstreams
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: users
+      - key: MIN_LATENCY_MS
+        value: "5"
+      - key: MAX_LATENCY_MS
+        value: "40"
+
+  - type: web
+    name: api-gateway-mock-orders-v1
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./mock-upstreams/Dockerfile
+    dockerContext: ./mock-upstreams
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: orders-v1
+      - key: MIN_LATENCY_MS
+        value: "5"
+      - key: MAX_LATENCY_MS
+        value: "40"
+
+  - type: web
+    name: api-gateway-mock-orders-v2
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./mock-upstreams/Dockerfile
+    dockerContext: ./mock-upstreams
+    healthCheckPath: /health
+    envVars:
+      - key: SERVICE_NAME
+        value: orders-v2
+      - key: ERROR_RATE
+        value: "0.6"
+      - key: MIN_LATENCY_MS
+        value: "5"
+      - key: MAX_LATENCY_MS
+        value: "40"
+
+  - type: keyvalue
+    name: api-gateway-redis
+    plan: free
+    region: virginia
+    ipAllowList: [] # no external internet access; reachable only by the services above over Render's private network
+    maxmemoryPolicy: noeviction

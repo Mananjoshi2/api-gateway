@@ -5,6 +5,19 @@ import { gatewayConfigSchema, GatewayConfig, RouteConfig, Tier } from './schema'
 import { logger } from '../lib/logger';
 
 /**
+ * Replaces ${VAR_NAME} placeholders with process.env.VAR_NAME. Lets
+ * routes.yaml reference upstream hosts that are only known at deploy time
+ * (e.g. a PaaS's dynamically assigned internal hostname/port for another
+ * service) without hardcoding them into the committed config file. A
+ * placeholder with no matching env var resolves to an empty string rather
+ * than throwing -- the resulting invalid URL will fail schema validation
+ * with a clear error instead of a cryptic env-lookup failure.
+ */
+export function substituteEnvVars(raw: string): string {
+  return raw.replace(/\$\{(\w+)\}/g, (_match, name: string) => process.env[name] ?? '');
+}
+
+/**
  * Loads gateway routing config from a YAML file and keeps it in memory.
  * Watches the file for edits so route/tier changes apply without a restart.
  * Runtime overrides (e.g. rollback flipping activeVersion) live only in memory
@@ -21,7 +34,8 @@ export class ConfigStore {
 
   private readFromDisk(): GatewayConfig {
     const raw = fs.readFileSync(this.filePath, 'utf8');
-    const parsed = yaml.load(raw);
+    const substituted = substituteEnvVars(raw);
+    const parsed = yaml.load(substituted);
     const result = gatewayConfigSchema.safeParse(parsed);
     if (!result.success) {
       throw new Error(`Invalid gateway config at ${this.filePath}: ${result.error.message}`);

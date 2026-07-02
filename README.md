@@ -289,4 +289,15 @@ threshold/minimum-sample/stale-version logic.
 
 ## Deployment
 
-See [DEPLOY.md](DEPLOY.md) for step-by-step AWS EC2 deployment instructions.
+**Live free-tier demo:** [`render.yaml`](render.yaml) is a Render Blueprint that
+deploys the gateway + 3 mock upstreams + Redis, entirely on Render's free
+plan (no card required, nothing billable). To deploy your own copy: fork this
+repo, then in the Render Dashboard choose **New > Blueprint** and point it at
+your fork. Render provisions everything the file declares -- JWT secrets are
+auto-generated, Redis and the mock upstreams are wired up via internal
+hostnames, nothing is hardcoded. Free-tier services spin down after 15
+minutes idle and cold-start (a few seconds) on the next request.
+
+**Persistent/paid deployment:** see [DEPLOY.md](DEPLOY.md) for step-by-step
+AWS EC2 instructions (security groups, Docker install, TLS, systemd restart
+policy).

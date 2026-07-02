@@ -1,0 +1,30 @@
+# Same routing/tiers as routes.yaml, but upstream hosts are ${VAR}
+# placeholders resolved at boot from env vars that render.yaml wires up via
+# `fromService: property: hostport` (see repo root render.yaml). Render
+# assigns those hostnames dynamically, so they can't be hardcoded here.
+
+tiers:
+  free:
+    requestsPerSecond: 5
+    burst: 10
+  pro:
+    requestsPerSecond: 2000
+    burst: 3000
+
+routes:
+  - path: /api/users
+    upstream: http://${MOCK_USERS_HOSTPORT}
+    auth: required
+    tier: free
+
+  - path: /api/orders
+    auth: required
+    tier: pro
+    versions:
+      v1: http://${MOCK_ORDERS_V1_HOSTPORT}
+      v2: http://${MOCK_ORDERS_V2_HOSTPORT}
+    activeVersion: v1
+    rollback:
+      enabled: true
+      errorThreshold: 0.5
+      windowSize: 50
