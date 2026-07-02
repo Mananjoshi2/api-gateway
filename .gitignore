@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.DS_Store
+loadtest/loadtest
+loadtest/loadtest.exe
+*.pid
+.vscode/
+.idea/

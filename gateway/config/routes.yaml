@@ -1,0 +1,29 @@
+# Gateway routing config. Path -> upstream mapping, loaded at boot and hot-reloaded
+# on edit (see src/config/configStore.ts). This file is the source of truth for
+# rate-limit tiers and for which upstream (or upstream version) each path proxies to.
+
+tiers:
+  free:
+    requestsPerSecond: 5
+    burst: 10
+  pro:
+    requestsPerSecond: 50
+    burst: 100
+
+routes:
+  - path: /api/users
+    upstream: http://mock-users:4001
+    auth: required
+    tier: free
+
+  - path: /api/orders
+    auth: required
+    tier: pro
+    versions:
+      v1: http://mock-orders-v1:4002
+      v2: http://mock-orders-v2:4003
+    activeVersion: v1
+    rollback:
+      enabled: true
+      errorThreshold: 0.5
+      windowSize: 50

@@ -1,0 +1,29 @@
+# Same as routes.yaml but pointing at localhost ports, for running the gateway
+# directly on the host (npm run dev) against mock upstreams started manually,
+# without docker-compose. See README "Running without Docker".
+
+tiers:
+  free:
+    requestsPerSecond: 5
+    burst: 10
+  pro:
+    requestsPerSecond: 50
+    burst: 100
+
+routes:
+  - path: /api/users
+    upstream: http://localhost:4001
+    auth: required
+    tier: free
+
+  - path: /api/orders
+    auth: required
+    tier: pro
+    versions:
+      v1: http://localhost:4002
+      v2: http://localhost:4003
+    activeVersion: v1
+    rollback:
+      enabled: true
+      errorThreshold: 0.5
+      windowSize: 50

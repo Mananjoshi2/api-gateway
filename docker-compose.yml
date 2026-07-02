@@ -1,0 +1,65 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mock-users:
+    build: ./mock-upstreams
+    environment:
+      SERVICE_NAME: users
+      PORT: 4001
+      MIN_LATENCY_MS: 5
+      MAX_LATENCY_MS: 40
+    ports:
+      - "4001:4001"
+
+  mock-orders-v1:
+    build: ./mock-upstreams
+    environment:
+      SERVICE_NAME: orders-v1
+      PORT: 4002
+      MIN_LATENCY_MS: 5
+      MAX_LATENCY_MS: 40
+    ports:
+      - "4002:4002"
+
+  # v2 simulates a bad rollout: 60% error rate. Used to demo the rollback/circuit
+  # breaker in routes.yaml (activeVersion: v1 by default; flip it to v2 in the admin
+  # API to watch the gateway auto-rollback). See README "Rollback demo".
+  mock-orders-v2:
+    build: ./mock-upstreams
+    environment:
+      SERVICE_NAME: orders-v2
+      PORT: 4003
+      ERROR_RATE: "0.6"
+      MIN_LATENCY_MS: 5
+      MAX_LATENCY_MS: 40
+    ports:
+      - "4003:4003"
+
+  gateway:
+    build: ./gateway
+    depends_on:
+      redis:
+        condition: service_healthy
+      mock-users:
+        condition: service_started
+      mock-orders-v1:
+        condition: service_started
+      mock-orders-v2:
+        condition: service_started
+    environment:
+      PORT: 8080
+      ROUTES_CONFIG_PATH: /app/config/routes.yaml
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: info
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
+    ports:
+      - "8080:8080"

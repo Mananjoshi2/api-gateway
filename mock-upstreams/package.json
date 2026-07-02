@@ -1,0 +1,13 @@
+{
+  "name": "mock-upstream",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny configurable Express service used as a proxy target by the gateway",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
