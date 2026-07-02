@@ -1,0 +1,322 @@
+{
+  "info": {
+    "_postman_id": "3cb8e5dc-58c4-4e60-b57f-f888f66cfa0d",
+    "name": "Developer-Facing API Gateway",
+    "description": "Auth flow, proxied gateway requests, rate-limit testing, rollback/circuit-breaker admin, and monitoring endpoints. Use with the \"API Gateway - Local\" environment. Run Auth > Register once first (or use Login if the account already exists) -- its test script captures accessToken/refreshToken/apiKey into environment variables that every other request reuses.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"tier\": \"{{tier}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "description": "Creates an account. Captures accessToken/refreshToken/apiKey into environment variables for every other request in this collection."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201 (or 409 if already registered)', function () {",
+                  "    pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.environment.set('accessToken', body.accessToken);",
+                  "    pm.environment.set('refreshToken', body.refreshToken);",
+                  "    pm.environment.set('apiKey', body.user.apiKey);",
+                  "    pm.environment.set('userId', body.user.id);",
+                  "    console.log('Registered', body.user.email, '-> apiKey', body.user.apiKey);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Use if the account from Register already exists. Also refreshes the captured tokens."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('accessToken', body.accessToken);",
+                  "pm.environment.set('refreshToken', body.refreshToken);",
+                  "pm.environment.set('apiKey', body.user.apiKey);",
+                  "pm.environment.set('userId', body.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Rotates the refresh token: the current one is invalidated and a new pair is issued. Running this request twice in a row with the same stored token demonstrates reuse detection (second call returns 401 refresh_token_reused)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.environment.set('accessToken', body.accessToken);",
+                  "    pm.environment.set('refreshToken', body.refreshToken);",
+                  "    pm.test('Issued a new token pair', function () { pm.expect(body.accessToken).to.be.a('string'); });",
+                  "} else {",
+                  "    pm.test('Reuse of a rotated-out token is rejected', function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Gateway - Proxied Routes",
+      "item": [
+        {
+          "name": "Get User (protected, /api/users)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/42", "host": ["{{baseUrl}}"], "path": ["api", "users", "42"] },
+            "description": "Proxied straight through to the mock \"users\" upstream. Requires a valid access token (auth: required in routes.yaml)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response carries the gateway request id', function () {",
+                  "    pm.expect(pm.response.json().requestId).to.be.a('string');",
+                  "});",
+                  "pm.test('Rate limit headers present', function () {",
+                  "    pm.response.to.have.header('X-RateLimit-Limit');",
+                  "    pm.response.to.have.header('X-RateLimit-Remaining');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User (no token -> 401)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/42", "host": ["{{baseUrl}}"], "path": ["api", "users", "42"] },
+            "description": "Same route, no Authorization header -- demonstrates the 401 path."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status is 401', function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Order (versioned, /api/orders)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/orders/7", "host": ["{{baseUrl}}"], "path": ["api", "orders", "7"] },
+            "description": "Routed to whichever version is currently active (see Admin folder to flip versions and watch the circuit breaker)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 or 500 (v2 is seeded with a 60% error rate)', function () {",
+                  "    pm.expect([200, 500]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Rate Limit Testing",
+      "item": [
+        {
+          "name": "Hammer /api/users (run via Collection Runner, ~15 iterations)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/users/1", "host": ["{{baseUrl}}"], "path": ["api", "users", "1"] },
+            "description": "Open Postman's Collection Runner and run just this request 15+ times back to back. The free tier's burst is 10, so you'll see the first ~10 return 200 and the rest 429 with Retry-After -- this is the rate limiter's centerpiece behavior. Use a pro-tier account (see Auth > Register, tier=pro) to see a much higher burst before 429s start."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const remaining = pm.response.headers.get('X-RateLimit-Remaining');",
+                  "const limit = pm.response.headers.get('X-RateLimit-Limit');",
+                  "console.log(`status=${pm.response.code} limit=${limit} remaining=${remaining}`);",
+                  "",
+                  "pm.test('Always carries X-RateLimit-* headers', function () {",
+                  "    pm.response.to.have.header('X-RateLimit-Limit');",
+                  "    pm.response.to.have.header('X-RateLimit-Remaining');",
+                  "    pm.response.to.have.header('X-RateLimit-Reset');",
+                  "});",
+                  "",
+                  "if (pm.response.code === 429) {",
+                  "    pm.test('429 carries Retry-After', function () {",
+                  "        pm.response.to.have.header('Retry-After');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin (Rollback / Circuit Breaker)",
+      "item": [
+        {
+          "name": "List Routes + Version Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/routes", "host": ["{{baseUrl}}"], "path": ["admin", "routes"] },
+            "description": "Shows every configured route, and for versioned routes the active version plus each version's rolling error-window stats."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status is 200', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Force Active Version (manual rollback/rollforward)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"routePath\": \"{{targetRoutePath}}\",\n  \"version\": \"{{targetVersion}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/routes/version", "host": ["{{baseUrl}}"], "path": ["admin", "routes", "version"] },
+            "description": "Flip /api/orders to v2 (deliberately seeded with a 60% error rate), then hit 'Get Order' in the Gateway folder ~10 times via the Runner -- the circuit breaker should auto-rollback activeVersion to v1 within a handful of requests. Re-check with List Routes."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status is 200', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 200', function () { pm.response.to.have.status(200); });"] }
+            }
+          ]
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/metrics", "host": ["{{baseUrl}}"], "path": ["metrics"] },
+            "description": "Prometheus text-exposition format: request counts, latency histograms, rate-limit rejections, upstream errors."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Body contains gateway metrics', function () {",
+                  "    pm.expect(pm.response.text()).to.include('gateway_http_requests_total');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenAPI Spec (JSON)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/docs.json", "host": ["{{baseUrl}}"], "path": ["docs.json"] },
+            "description": "Raw OpenAPI 3.0 spec. Interactive docs are served at {{baseUrl}}/docs (open in a browser, not via Postman)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": ["pm.test('Status is 200', function () { pm.response.to.have.status(200); });"] }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
