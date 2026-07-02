@@ -1,7 +1,9 @@
 # Same routing/tiers as routes.yaml, but upstream hosts are ${VAR}
-# placeholders resolved at boot from env vars that render.yaml wires up via
-# `fromService: property: hostport` (see repo root render.yaml). Render
-# assigns those hostnames dynamically, so they can't be hardcoded here.
+# placeholders resolved at boot from env vars set in the repo root
+# render.yaml. Values are the mocks' public *.onrender.com URLs -- Render's
+# free web services can't receive private-network traffic, so plain HTTPS to
+# their public URL is what actually works on the free plan (see render.yaml
+# comments for the full explanation).
 
 tiers:
   free:
@@ -13,7 +15,7 @@ tiers:
 
 routes:
   - path: /api/users
-    upstream: http://${MOCK_USERS_HOSTPORT}
+    upstream: ${MOCK_USERS_URL}
     auth: required
     tier: free
 
@@ -21,8 +23,8 @@ routes:
     auth: required
     tier: pro
     versions:
-      v1: http://${MOCK_ORDERS_V1_HOSTPORT}
-      v2: http://${MOCK_ORDERS_V2_HOSTPORT}
+      v1: ${MOCK_ORDERS_V1_URL}
+      v2: ${MOCK_ORDERS_V2_URL}
     activeVersion: v1
     rollback:
       enabled: true

@@ -34,21 +34,19 @@ services:
           type: keyvalue
           name: api-gateway-redis
           property: connectionString
-      - key: MOCK_USERS_HOSTPORT
-        fromService:
-          type: web
-          name: api-gateway-mock-users
-          property: hostport
-      - key: MOCK_ORDERS_V1_HOSTPORT
-        fromService:
-          type: web
-          name: api-gateway-mock-orders-v1
-          property: hostport
-      - key: MOCK_ORDERS_V2_HOSTPORT
-        fromService:
-          type: web
-          name: api-gateway-mock-orders-v2
-          property: hostport
+      # Render's free web services can send private-network requests but
+      # can't receive them, so the mocks (also free) can't be reached via
+      # fromService's internal hostport/host properties -- their normal
+      # public *.onrender.com URLs are used instead (still $0, just regular
+      # inbound HTTPS like any other client). Hardcoded because Render's
+      # Blueprint spec has no fromService property for a service's public
+      # URL, and its subdomain is just the service name below.
+      - key: MOCK_USERS_URL
+        value: https://api-gateway-mock-users.onrender.com
+      - key: MOCK_ORDERS_V1_URL
+        value: https://api-gateway-mock-orders-v1.onrender.com
+      - key: MOCK_ORDERS_V2_URL
+        value: https://api-gateway-mock-orders-v2.onrender.com
 
   - type: web
     name: api-gateway-mock-users
