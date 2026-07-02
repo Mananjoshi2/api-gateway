@@ -1,6 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
@@ -11,6 +12,7 @@ services:
 
   mock-users:
     build: ./mock-upstreams
+    restart: unless-stopped
     environment:
       SERVICE_NAME: users
       PORT: 4001
@@ -21,6 +23,7 @@ services:
 
   mock-orders-v1:
     build: ./mock-upstreams
+    restart: unless-stopped
     environment:
       SERVICE_NAME: orders-v1
       PORT: 4002
@@ -34,6 +37,7 @@ services:
   # API to watch the gateway auto-rollback). See README "Rollback demo".
   mock-orders-v2:
     build: ./mock-upstreams
+    restart: unless-stopped
     environment:
       SERVICE_NAME: orders-v2
       PORT: 4003
@@ -45,6 +49,7 @@ services:
 
   gateway:
     build: ./gateway
+    restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
@@ -66,6 +71,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.53.0
+    restart: unless-stopped
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
@@ -75,6 +81,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.1.0
+    restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "true"
