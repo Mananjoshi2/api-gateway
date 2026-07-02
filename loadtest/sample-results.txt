@@ -1,0 +1,46 @@
+Sample load test run
+=====================
+
+Command:
+  ./loadtest -url http://gateway:8080/api/users/1 -rps 1500 -concurrency 250 -duration 10s -token <pro-tier JWT access token>
+
+Setup:
+  - Full stack running via `docker compose up` (gateway, redis, 3 mock upstreams, prometheus, grafana)
+  - loadtest binary run in its own container attached to the same compose network,
+    hitting the gateway service directly (http://gateway:8080) -- no host networking
+    NAT hop in between
+  - Test account registered via POST /auth/register with "tier": "pro" (2000 req/sec /
+    3000 burst -- see gateway/config/routes.yaml) so the gateway's own throughput is
+    what's being measured, not the rate limiter rejecting requests
+  - Target endpoint (/api/users/:id) exercises the full request path: JWT verification,
+    Redis-backed rate limit check (GCRA Lua script), reverse proxy, mock upstream round
+    trip, structured logging, and Prometheus metrics recording
+
+Output:
+
+Load testing http://gateway:8080/api/users/1
+  target: 1500 req/sec | concurrency: 250 | duration: 10s
+
+Results
+=======
+  Total requests:     14951
+  Successful:         14951 (100.0%)
+  Failed:             0
+  Rate limited (429): 0
+  Actual duration:    10.17s
+  Achieved req/sec:   1470.7
+
+Latency
+=======
+  min: 7.09ms   avg: 81.79ms   max: 288.90ms
+  p50: 63.87ms   p95: 172.57ms   p99: 205.49ms
+
+Notes:
+  - Repeated runs with identical parameters landed between ~1200 and ~1470 achieved
+    req/sec on a single laptop running Docker Desktop (one unclustered Node process
+    for the gateway, competing with the host OS and every other container for CPU).
+    Every run had a 100% success rate and zero unexpected errors -- the variance is in
+    throughput ceiling, not correctness. On a dedicated EC2 instance (see DEPLOY.md)
+    expect materially higher and more consistent numbers.
+  - Run with -json for machine-readable output suitable for charting:
+      ./loadtest -url ... -json > results.json

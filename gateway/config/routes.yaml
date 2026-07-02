@@ -7,8 +7,10 @@ tiers:
     requestsPerSecond: 5
     burst: 10
   pro:
-    requestsPerSecond: 50
-    burst: 100
+    # Generous on purpose: this tier is what the Go load-test tool hits to
+    # demonstrate the gateway's own throughput ceiling, not the limiter's.
+    requestsPerSecond: 2000
+    burst: 3000
 
 routes:
   - path: /api/users
