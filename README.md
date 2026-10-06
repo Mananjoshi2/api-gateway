@@ -1,10 +1,9 @@
 # Developer-Facing API Gateway
 
-A production-style API gateway built to demonstrate real backend infrastructure:
-JWT auth with refresh rotation, a Redis-backed rate limiter that holds up under
-real concurrency, config-driven reverse proxying with a version-aware
-rollback/circuit-breaker, Prometheus + Grafana monitoring, and a standalone Go
-CLI used to prove the throughput claims.
+A production-style API gateway with JWT auth and refresh rotation, a
+Redis-backed rate limiter that holds up under real concurrency, config-driven
+reverse proxying with a version-aware rollback/circuit-breaker, Prometheus +
+Grafana monitoring, and a standalone Go CLI for load-testing throughput.
 
 **Live demo:** https://api-gateway-et70.onrender.com (free tier -- first
 request after idle takes a few seconds to cold-start). Try:
@@ -162,8 +161,9 @@ Gateway logs show the trip:
 
 Known simplification: with exactly two versions this always rolls back to
 "the other one" and doesn't require consecutive healthy samples before
-re-promoting -- fine for this demo (only v2 is seeded with errors), but a real
-system would track more history to avoid flapping between two bad versions.
+re-promoting. That's sufficient for a two-version setup, but a system
+running more versions at once would need to track more history to avoid
+flapping between two bad versions.
 
 ## Monitoring
 
